@@ -3,20 +3,6 @@ revision = 3
 requires-python = ">=3.13"
 
 [[package]]
-name = "openroad"
-version = "0.0.1"
-source = { registry = "https://pypi.org/simple" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/1e/21/7d52cff9ace5cb66b344c88e1f21263c4fa1fc528dde221efa819fae0980/openroad-0.0.1-cp310-abi3-manylinux_2_38_x86_64.whl", hash = "sha256:4f6b8f946720b29e456828880bdacf065f1d543be6e42123159f03e25913acf6", size = 46533545, upload-time = "2025-09-16T20:43:30.065Z" },
-]
-
-[[package]]
 name = "toy-place"
 version = "0.1.0"
 source = { virtual = "." }
-dependencies = [
-    { name = "openroad" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "openroad" }]

@@ -105,12 +105,12 @@ def parse_layer(fin: TextIOWrapper, name: str) -> Layer:
 
 
 @dataclass
-class Via:
+class LibVia:
     name: str
     layers: dict[Layer, Rect]
 
 
-def parse_via(fin: TextIOWrapper, name: str) -> Via:
+def parse_via(fin: TextIOWrapper, name: str) -> LibVia:
     toks = fin.readline().strip().split()
     layers = {}
     while toks[0] != "END":
@@ -119,7 +119,7 @@ def parse_via(fin: TextIOWrapper, name: str) -> Via:
         rect = Rect((float(toks[1]), float(toks[2])), (float(toks[3]), float(toks[4])))
         layers[layer_name] = rect
         toks = fin.readline().strip().split()
-    return Via(name, layers)
+    return LibVia(name, layers)
 
 
 @dataclass
@@ -221,19 +221,22 @@ def parse_pin_port(fin: TextIOWrapper) -> PinPort:
     toks = fin.readline().strip().split()
 
     layer_name = rect = None
-    while toks[0] != 'END':
-        if toks[0] == 'LAYER':
+    while toks[0] != "END":
+        if toks[0] == "LAYER":
             layer_name = toks[1]
-        elif toks[0] == 'RECT':
-            rect = Rect((float(toks[1]), float(toks[2])), (float(toks[3]), float(toks[4])))
+        elif toks[0] == "RECT":
+            rect = Rect(
+                (float(toks[1]), float(toks[2])), (float(toks[3]), float(toks[4]))
+            )
         else:
-            raise Exception(f'Unknown port statement {toks[0]}')
+            raise Exception(f"Unknown port statement {toks[0]}")
         toks = fin.readline().strip().split()
 
     if layer_name and rect:
         return PinPort(layer_name, rect)
     else:
         raise Exception("Missing layer name or rect when parsing port")
+
 
 class MacroSiteOrient(Enum):
     N = 1
@@ -271,23 +274,24 @@ class Pin:
     use: PinUse
     port: PinPort
 
+
 def parse_pin(fin: TextIOWrapper, name: str) -> Pin:
     toks = fin.readline().strip().split()
     dir = use = port = None
-    while toks[0] != 'END' or toks[1] != name:
-        if toks[0] == 'DIRECTION':
+    while toks[0] != "END" or toks[1] != name:
+        if toks[0] == "DIRECTION":
             dir_map = {
                 "INPUT": PinDir.INPUT,
                 "OUTPUT": PinDir.OUTPUT,
                 "INOUT": PinDir.INOUT,
-                "FEEDTHRU": PinDir.FEEDTHRU
+                "FEEDTHRU": PinDir.FEEDTHRU,
             }
 
             dir = dir_map[toks[1]]
-        elif toks[0] == 'USE':
-            use_map = { "SIGNAL" : PinUse.SIGNAL }
+        elif toks[0] == "USE":
+            use_map = {"SIGNAL": PinUse.SIGNAL}
             use = use_map[toks[1]]
-        elif toks[0] == 'PORT':
+        elif toks[0] == "PORT":
             port = parse_pin_port(fin)
         else:
             raise Exception(f"Error parsing pin, found {toks[0]}")
@@ -296,6 +300,7 @@ def parse_pin(fin: TextIOWrapper, name: str) -> Pin:
         return Pin(name, dir, use, port)
     else:
         raise Exception("Error parsing pin")
+
 
 @dataclass
 class Macro:
@@ -306,11 +311,35 @@ class Macro:
     origin: tuple[float, float]
     symmetry: Symmetry
     site: MacroSite
-    pin: Pin
+    pins: dict[str, Pin]
+
+
+def parse_macro_site(toks: list[str]) -> MacroSite:
+    orient_mapping = {
+        "N": MacroSiteOrient.N,
+        "S": MacroSiteOrient.S,
+        "E": MacroSiteOrient.E,
+        "W": MacroSiteOrient.W,
+        "FN": MacroSiteOrient.FN,
+        "FS": MacroSiteOrient.FS,
+        "FE": MacroSiteOrient.FE,
+        "FW": MacroSiteOrient.FW,
+    }
+
+    return MacroSite(
+        toks[1],
+        (float(toks[2]), float(toks[3])),
+        orient_mapping[toks[4]],
+        int(toks[6]),
+        int(toks[8]),
+        int(toks[10]),
+        int(toks[11]),
+    )
 
 
 def parse_macro(fin: TextIOWrapper, name: str) -> Macro:
-    macro_class = width = height = origin = symmetry = macro_site = pin = None
+    macro_class = width = height = origin = symmetry = macro_site = None
+    pins = {}
     toks = fin.readline().strip().split()
     while toks[0] != "END" or toks[1] != name:
         if toks[0] == "CLASS":
@@ -333,37 +362,20 @@ def parse_macro(fin: TextIOWrapper, name: str) -> Macro:
             elif toks[1] == "R90":
                 symmetry = Symmetry.R90
         elif toks[0] == "SITE":
-            orient_mapping = {
-                "N": MacroSiteOrient.N,
-                "S": MacroSiteOrient.S,
-                "E": MacroSiteOrient.E,
-                "W": MacroSiteOrient.W,
-                "FN": MacroSiteOrient.FN,
-                "FS": MacroSiteOrient.FS,
-                "FE": MacroSiteOrient.FE,
-                "FW": MacroSiteOrient.FW,
-            }
-
-            macro_site = MacroSite(
-                toks[1],
-                (float(toks[2]), float(toks[3])),
-                orient_mapping[toks[4]],
-                int(toks[6]),
-                int(toks[8]),
-                int(toks[10]),
-                int(toks[11]),
-            )
-        elif toks[0] == 'PIN':
+            macro_site = parse_macro_site(toks)
+        elif toks[0] == "PIN":
             pin = parse_pin(fin, toks[1])
+            pins[pin.name] = pin
         else:
             raise Exception(f"Unexpected macro statement {toks[0]}")
-            
+
         toks = fin.readline().strip().split()
-    if macro_class and width and height and origin and symmetry and macro_site and pin:
-        return Macro(name, macro_class, width, height, origin, symmetry, macro_site, pin)
+    if macro_class and width and height and origin and symmetry and macro_site:
+        return Macro(
+            name, macro_class, width, height, origin, symmetry, macro_site, pins
+        )
     else:
         raise Exception("Not all macro statements exist")
-
 
 
 class Tech:
@@ -397,14 +409,205 @@ class Tech:
                     self.sites.append(parse_site(fin, toks[1]))
                 elif toks[0] == "MACRO":
                     self.macros.append(parse_macro(fin, toks[1]))
+                elif toks[0] == "END":
+                    pass
+                else:
+                    raise Exception(f"Unknown command {toks[0]}")
 
                 line = fin.readline().strip()
                 toks = line.split()
 
 
+class GridDir(Enum):
+    X = 1
+    Y = 2
+
+
+@dataclass
+class Track:
+    grid_dir: GridDir
+    start: float
+    num_tracks: int
+    step: float
+    layers: list[str]
+
+
+@dataclass
+class GCellGrid:
+    grid_dir: GridDir
+    start: float
+    num_tracks: int
+    step: float
+
+
+@dataclass
+class DefVia:
+    name: str
+    layers: dict[str, Rect]
+
+
+def parse_def_via(fin: TextIOWrapper) -> DefVia:
+    toks = fin.readline().strip().split()
+    while toks[-1] != ";":
+        toks += fin.readline().strip().split()
+
+    name = toks[1]
+    layers = {}
+    idx = 2
+    while toks[idx] == "+":
+        layer = toks[idx + 2]
+        rect = Rect(
+            (float(toks[idx + 4]), float(toks[idx + 5])),
+            (float(toks[idx + 8]), float(toks[idx + 9])),
+        )
+        layers[layer] = rect
+        idx += 11
+    return DefVia(name, layers)
+
+
+@dataclass
+class CompFixed:
+    pt: tuple[int, int]
+    orient: MacroSiteOrient
+
+
+@dataclass
+class CompPlaced:
+    pt: tuple[int, int]
+    orient: MacroSiteOrient
+
+
+@dataclass
+class CompUnplaced:
+    pass
+
+
+CompType = CompFixed | CompPlaced | CompUnplaced
+
+
+@dataclass
+class Component:
+    comp_name: str
+    macro_name: str
+    ty: CompType
+
+
+def parse_component(fin: TextIOWrapper) -> Component:
+    toks = fin.readline().strip().split()
+    comp_name = toks[1]
+    macro_name = toks[2]
+    if toks[4] == "FIXED" or toks[4] == "PLACED":
+        orient_mapping = {
+            "N": MacroSiteOrient.N,
+            "S": MacroSiteOrient.S,
+            "E": MacroSiteOrient.E,
+            "W": MacroSiteOrient.W,
+            "FN": MacroSiteOrient.FN,
+            "FS": MacroSiteOrient.FS,
+            "FE": MacroSiteOrient.FE,
+            "FW": MacroSiteOrient.FW,
+        }
+
+        pt = (int(toks[6]), int(toks[7]))
+        orient = orient_mapping[toks[9]]
+
+        if toks[4] == "FIXED":
+            return Component(comp_name, macro_name, CompFixed(pt, orient))
+        else:
+            return Component(comp_name, macro_name, CompPlaced(pt, orient))
+    elif toks[4] == "UNPLACED":
+        return Component(comp_name, macro_name, CompUnplaced())
+    else:
+        raise Exception(f"Exptected a component type, found {toks[4]}")
+
+
+@dataclass
+class NetPin:
+    comp_name: str
+    pin_name: str
+
+
+@dataclass
+class Net:
+    name: str
+    pins: list[NetPin]
+
+
+def parse_net(fin: TextIOWrapper) -> Net:
+    toks = fin.readline().strip().split()
+    while toks[-1] != ";":
+        toks += fin.readline().strip().split()
+    name = toks[1]
+    idx = 2
+    pins = []
+    while toks[idx] != ";":
+        pins.append(NetPin(toks[idx + 1], toks[idx + 2]))
+        idx += 4
+    return Net(name, pins)
+
+
 class Design:
-    def __init__(self, design_path: str, tech: Tech):
-        pass
+    def __init__(self, design_path: str):
+        self.sites = []
+        with open(design_path) as fin:
+            toks = fin.readline().strip().split()
+            while toks != ["END", "DESIGN"]:
+                if not toks or toks[0] == "#":
+                    pass
+                elif toks[0] == "DESIGN":
+                    self.design = toks[1]
+                elif toks[0] == "DIEAREA":
+                    self.diearea = Rect(
+                        (float(toks[2]), float(toks[3])),
+                        (float(toks[6]), float(toks[7])),
+                    )
+                elif toks[0] == "UNITS":
+                    self.dbu_per_micron = int(toks[3])
+                elif toks[0] == "SITE":
+                    self.sites.append(parse_macro_site(toks))
+                elif toks[0] == "TRACKS":
+                    if toks[1] == "X":
+                        self.x_track = Track(
+                            GridDir.X,
+                            float(toks[2]),
+                            int(toks[4]),
+                            float(toks[6]),
+                            toks[8:-1],
+                        )
+                    else:
+                        self.y_track = Track(
+                            GridDir.Y,
+                            float(toks[2]),
+                            int(toks[4]),
+                            float(toks[6]),
+                            toks[8:-1],
+                        )
+                elif toks[0] == "GCELLGRID":
+                    if toks[1] == "X":
+                        self.x_gcell_grid = GCellGrid(
+                            GridDir.X, int(toks[2]), int(toks[4]), float(toks[6])
+                        )
+                    else:
+                        self.y_gcell_grid = GCellGrid(
+                            GridDir.Y, int(toks[2]), int(toks[4]), float(toks[6])
+                        )
+                elif toks[0] == "VIAS":
+                    num_vias = int(toks[1])
+                    self.vias = [parse_def_via(fin) for _ in range(num_vias)]
+                elif toks[0] == "COMPONENTS":
+                    num_comps = int(toks[1])
+                    self.comps = [parse_component(fin) for _ in range(num_comps)]
+                elif toks[0] == "NETS":
+                    num_nets = int(toks[1])
+                    self.nets = [parse_net(fin) for _ in range(num_nets)]
+                elif toks[0] == "END":
+                    pass
+                else:
+                    raise Exception(
+                        f"Unexpected statement when parsing design, {toks[0]}"
+                    )
+
+                toks = fin.readline().strip().split()
 
 
 def main():
@@ -423,10 +626,8 @@ def main():
 
     args = parser.parse_args()
 
-    tech = Tech(args.lef_path)
-    print(tech.macros[0])
-    design = Design(args.def_path, tech)
-    print(design)
+    _tech = Tech(args.lef_path)
+    _design = Design(args.def_path)
 
 
 if __name__ == "__main__":
