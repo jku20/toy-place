@@ -391,7 +391,6 @@ class Tech:
             line = fin.readline().strip()
             toks = line.split()
             while toks != ["END", "LIBRARY"]:
-                print(toks)
                 if not toks or toks[0] == "#":
                     pass
                 elif toks[0] == "NAMESCASESENSITIVE":
@@ -626,8 +625,10 @@ def main():
 
     args = parser.parse_args()
 
-    _tech = Tech(args.lef_path)
-    _design = Design(args.def_path)
+    tech = Tech(args.lef_path)
+    design = Design(args.def_path)
+
+    print(tech.macros, design.nets)
 
 
 if __name__ == "__main__":
