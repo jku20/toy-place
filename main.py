@@ -12,9 +12,9 @@ GREEN="\033[1;32m"
 ENDCOLOR="\033[0m"
 
 @dataclass
-class Box:
-    bot_left: tuple[int, int]
-    top_right: tuple[int, int]
+class Rect:
+    bot_left: tuple[float, float]
+    top_right: tuple[float, float]
 
 @dataclass
 class Units:
@@ -50,8 +50,8 @@ class Layer:
     name: str
     ty: LayerTy
 
-def parse_box(fin: TextIOWrapper) -> Box:
-    return Box((0, 0), (0, 0))
+def parse_box(fin: TextIOWrapper) -> Rect:
+    return Rect((0, 0), (0, 0))
 
 
 def parse_units(fin: TextIOWrapper) -> Units:
@@ -89,9 +89,54 @@ def parse_layer(fin: TextIOWrapper, name: str) -> Layer:
     else:
         raise Exception(f'Unknown Layer type {toks[1]}')
 
+
+@dataclass
+class Via:
+    name: str
+    layers: dict[Layer, Rect]
+
+def parse_via(fin: TextIOWrapper, name: str) -> Via:
+    toks = fin.readline().strip().split()
+    layers = {}
+    while toks[0] != 'END':
+        layer_name = toks[1]
+        toks = fin.readline().strip().split()
+        rect = Rect((float(toks[1]), float(toks[2])), (float(toks[3]), float(toks[4])))
+        layers[layer_name] = rect
+        toks = fin.readline().strip().split()
+    return Via(name, layers)
+
+@dataclass
+class Spacing:
+    l1: str
+    l2: str
+    dist: float
+
+def parse_spacing(fin: TextIOWrapper) -> list[Spacing]:
+    toks = fin.readline().strip().split()
+    spacings = []
+    while toks[0] != 'END':
+        if toks[0] == 'SAMENET':
+            name1, name2, size = toks[1], toks[2], float(toks[3])
+            spacings.append(Spacing(name1, name2, size))
+        else:
+            raise Exception('Expected SAMENET')
+        toks = fin.readline().strip().split()
+    return spacings
+
+# @dataclass
+# class Macro:
+#     pass
+# 
+# def parse_macro(fin: TextIOWrapper, name: str) -> Macro:
+#     pass
+
 class Tech:
     def __init__(self, tech_path: str):
-        self.layers = []
+        self.layers = {}
+        self.vias = []
+        self.macros = []
+        self.spacing_constraints = []
         with open(tech_path) as fin:
             self.namecase_sensitive = False
 
@@ -106,9 +151,15 @@ class Tech:
                 elif toks[0] == 'UNITS':
                     self.units = parse_units(fin)
                 elif toks[0] == 'LAYER':
-                    self.layers.append(parse_layer(fin, toks[1]))
+                    layer = parse_layer(fin, toks[1])
+                    self.layers[layer.name] = layer
                 elif toks[0] == 'VIA':
-                    print("via")
+                    self.vias.append(parse_via(fin, toks[1]))
+                elif toks[0] == 'SPACING':
+                    self.spacing_constraints = parse_spacing(fin)
+                elif toks[0] == 'MACRO':
+                    break
+                    # self.macros.append(parse_macro(fin, toks[1]))
                 
                 line = fin.readline().strip()
                 toks = line.split()
@@ -129,7 +180,7 @@ def main():
     args = parser.parse_args()
 
     tech = Tech(args.lef_path)
-    print(tech.layers)
+    print(tech.spacing_constraints)
     design = Design(args.def_path, tech)
     print(design)
 
