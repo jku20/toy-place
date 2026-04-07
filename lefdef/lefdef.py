@@ -371,11 +371,11 @@ def parse_macro(fin: TextIOWrapper, name: str) -> Macro:
 
 class Tech:
     def __init__(self, tech_path: str):
-        self.layers = {}
-        self.vias = []
-        self.macros = []
-        self.spacing_constraints = []
-        self.sites = []
+        self.layers: dict[str, Layer] = {}
+        self.vias: list[LibVia] = []
+        self.macros: list[Macro] = []
+        self.spacing_constraints: list[Spacing] = []
+        self.sites: list[Site] = []
         with open(tech_path) as fin:
             self.namecase_sensitive = False
 
@@ -538,7 +538,7 @@ def parse_net(fin: TextIOWrapper) -> Net:
 
 class Design:
     def __init__(self, design_path: str):
-        self.sites = []
+        self.sites: list[MacroSite] = []
         with open(design_path) as fin:
             toks = fin.readline().strip().split()
             while toks != ["END", "DESIGN"]:
@@ -547,7 +547,7 @@ class Design:
                 elif toks[0] == "DESIGN":
                     self.design = toks[1]
                 elif toks[0] == "DIEAREA":
-                    self.diearea = Rect(
+                    self.die_area = Rect(
                         (float(toks[2]), float(toks[3])),
                         (float(toks[6]), float(toks[7])),
                     )
@@ -583,13 +583,17 @@ class Design:
                         )
                 elif toks[0] == "VIAS":
                     num_vias = int(toks[1])
-                    self.vias = [parse_def_via(fin) for _ in range(num_vias)]
+                    self.vias: list[DefVia] = [
+                        parse_def_via(fin) for _ in range(num_vias)
+                    ]
                 elif toks[0] == "COMPONENTS":
                     num_comps = int(toks[1])
-                    self.comps = [parse_component(fin) for _ in range(num_comps)]
+                    self.comps: list[Component] = [
+                        parse_component(fin) for _ in range(num_comps)
+                    ]
                 elif toks[0] == "NETS":
                     num_nets = int(toks[1])
-                    self.nets = [parse_net(fin) for _ in range(num_nets)]
+                    self.nets: list[Net] = [parse_net(fin) for _ in range(num_nets)]
                 elif toks[0] == "END":
                     pass
                 else:
