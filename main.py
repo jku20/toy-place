@@ -1,5 +1,5 @@
 import argparse
-from lefdef.lefdef import Tech, Design
+from lefdef import Tech, Design, CompFixed, Component
 
 GRAY = "\033[0;30m"
 CYAN = "\033[0;36m"
@@ -8,6 +8,28 @@ BLUE = "\033[0;34m"
 YELLOW = "\033[0;33m"
 GREEN = "\033[1;32m"
 ENDCOLOR = "\033[0m"
+
+
+def global_place(design: Design, tech: Tech) -> dict[str, tuple[float, float]]:
+    fixed: list[Component] = []
+    unfixed: list[Component] = []
+    for comp in design.comps:
+        if isinstance(comp.ty, CompFixed):
+            fixed.append(comp)
+        else:
+            unfixed.append(comp)
+
+    placement = {}
+    for comp in fixed:
+        if isinstance(comp.ty, CompFixed):
+            placement[comp.comp_name] = comp.ty.pt
+        else:
+            raise Exception("Every comp here should be Fixed")
+
+    for comp in unfixed:
+        placement[comp.comp_name] = (0, 0)
+
+    return placement
 
 
 def main():
@@ -29,7 +51,8 @@ def main():
     tech = Tech(args.lef_path)
     design = Design(args.def_path)
 
-    print(tech.macros, design.nets)
+    placement = global_place(design, tech)
+    print(placement)
 
 
 if __name__ == "__main__":
