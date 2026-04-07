@@ -26,6 +26,8 @@ def wl_cost(placement: Placement, design: Design, tech: Tech) -> float:
         for pin in net.pins:
             pin_pos = design.pin_midpoint(pin)
             for i in range(2):
+                pin_pos[i] += placement[pin.comp_name][i]
+            for i in range(2):
                 p = pin_pos[i]
                 max_num[i] += p * exp(ONE_OVER_GAMMA * p)
                 max_den[i] += exp(ONE_OVER_GAMMA * p)
