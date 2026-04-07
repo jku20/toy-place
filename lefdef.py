@@ -8,6 +8,11 @@ class Rect:
     bot_left: tuple[float, float]
     top_right: tuple[float, float]
 
+    def midpoint(self) -> tuple[float, float]:
+        return (self.bot_left[0] + self.top_right[0]) / 2, (
+            self.bot_left[1] + self.top_right[1]
+        ) / 2
+
 
 @dataclass
 class Units:
@@ -373,7 +378,7 @@ class Tech:
     def __init__(self, tech_path: str):
         self.layers: dict[str, Layer] = {}
         self.vias: list[LibVia] = []
-        self.macros: list[Macro] = []
+        self.macros: dict[str, Macro] = {}
         self.spacing_constraints: list[Spacing] = []
         self.sites: list[Site] = []
         with open(tech_path) as fin:
@@ -398,7 +403,8 @@ class Tech:
                 elif toks[0] == "SITE":
                     self.sites.append(parse_site(fin, toks[1]))
                 elif toks[0] == "MACRO":
-                    self.macros.append(parse_macro(fin, toks[1]))
+                    macro = parse_macro(fin, toks[1])
+                    self.macros[macro.name] = macro
                 elif toks[0] == "END":
                     pass
                 else:
@@ -537,7 +543,15 @@ def parse_net(fin: TextIOWrapper) -> Net:
 
 
 class Design:
-    def __init__(self, design_path: str):
+    def pin_midpoint(self, net_pin: NetPin) -> tuple[float, float]:
+        comp = self.comps[net_pin.comp_name]
+        macro = self.tech.macros[comp.macro_name]
+        macro_pin = macro.pins[net_pin.pin_name]
+        port_rect = macro_pin.port.rect
+        return port_rect.midpoint()
+
+    def __init__(self, design_path: str, tech: Tech):
+        self.tech: Tech = tech
         self.sites: list[MacroSite] = []
         with open(design_path) as fin:
             toks = fin.readline().strip().split()
@@ -583,14 +597,15 @@ class Design:
                         )
                 elif toks[0] == "VIAS":
                     num_vias = int(toks[1])
-                    self.vias: list[DefVia] = [
-                        parse_def_via(fin) for _ in range(num_vias)
-                    ]
+                    self.vias: dict[str, DefVia] = {
+                        (v := parse_def_via(fin)).name: v for _ in range(num_vias)
+                    }
                 elif toks[0] == "COMPONENTS":
                     num_comps = int(toks[1])
-                    self.comps: list[Component] = [
-                        parse_component(fin) for _ in range(num_comps)
-                    ]
+                    self.comps: dict[str, Component] = {
+                        (c := parse_component(fin)).comp_name: c
+                        for _ in range(num_comps)
+                    }
                 elif toks[0] == "NETS":
                     num_nets = int(toks[1])
                     self.nets: list[Net] = [parse_net(fin) for _ in range(num_nets)]
